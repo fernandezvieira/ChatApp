@@ -9,7 +9,7 @@ start() ->
 	gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
 init([]) ->
-	io:format("server started"),
+	io:format("Started server~n"),
 	{ok, ets:new(?MODULE, [])}.
 
 add_client(Name, Pid) ->
