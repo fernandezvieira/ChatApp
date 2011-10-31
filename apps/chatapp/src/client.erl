@@ -3,7 +3,8 @@
 -export([start/0, add_client/2, send_message/3]).
 
 start() ->
-	loop().
+	Pid = spawn(fun() -> loop() end),
+	{ok, Pid}.
 				
 add_client(Name, Pid) ->
 	server:add_client(Name, Pid).
@@ -15,3 +16,4 @@ loop() ->
 	receive
 		Message -> io:format("~p~n",[Message])
 	end.
+	
