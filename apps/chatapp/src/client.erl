@@ -6,11 +6,17 @@ start() ->
 	Pid = spawn(fun() -> loop() end),
 	{ok, Pid}.
 				
-add_client(Name, Pid) ->
-	server:add_client(Name, Pid).
+add_client(Name, [Pid | T]) ->
+	server:add_client(Name, Pid),
+	add_client(Name, T);
+add_client(Name, []) ->
+	ok.
 
 send_message(From, To, Message) ->
 	server:send_message(From, To, Message).
+	
+store(Message) ->
+	server:store(Message).
 
 loop() ->
 	receive
