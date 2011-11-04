@@ -2,7 +2,7 @@
 -behaviour(gen_server).
 -export([start/0]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
--export([add_client/2, send_message/3, get_all/0]).
+-export([add_channel/1, add_user/1, send_message/3]).
 -compile(export_all).
 
 start() ->
@@ -10,77 +10,105 @@ start() ->
 
 init([]) ->
 	io:format("Started server~n"),
-	{ok, {ets:new(?MODULE, []), ets:new(msgTab, [])}}.
+	{ok, {ets:new(?MODULE, [public]), ets:new(userTab, [])}}.
+	
+%% ===================================================================
+%% CALLER FUNCTIONS
+%% ===================================================================
 
-add_client(Name, Pid) ->
-	gen_server:call(?MODULE, {add, string:to_lower(Name), Pid}).
+%% ADD A NEW CHANNEL TO THE SERVER	
+add_channel(Channel) ->
+	gen_server:call(?MODULE, {add_channel, string:to_lower(Channel)}).
 
+%% ADD A NEW USER
+add_user({Username, IP, Pid}) ->
+	gen_server:call(?MODULE, {add_user, {string:to_lower(Username), IP, Pid}}).
+	
+%% SEND MESSAGE
 send_message(From, To, Message) ->
-	gen_server:call(?MODULE, {message, From, string:to_lower(To), Message}).
-
-get_all() ->
-	gen_server:call(?MODULE, {get_all}).
+	gen_server:call(?MODULE, {send_message, From, string:to_lower(To), Message}).
 	
-get_msgs(Client) ->
-	gen_server:call(?MODULE, {get_msgs, string:to_lower(Client)}).
-	
+%% GET CHANNELS
 get_channels() ->
 	gen_server:call(?MODULE, {get_channels}).
 	
-handle_call({add, Name, Pid}, _From, {ClientTab, MsgTab}) ->
-	Reply = case ets:lookup(ClientTab, Name) of
-			[] ->	ets:insert(ClientTab, {Name, [Pid]}),
-				{Name, has_been_added_and, Pid, has_been_added};
-			[{Name, List}] -> 
-				case check_pid(Pid, List) of
-					true -> {Pid, already_exists_in, Name};
-					false -> ets:insert(ClientTab, {Name, [Pid|List]}),
-						 {Pid, has_been_added_to, Name}
-				end
-		end,
-	{reply, Reply, {ClientTab, MsgTab}};
+%% GET CHANNEL MESSAGES
+get_msgs(Channel) ->
+	gen_server:call(?MODULE, {get_msgs, string:to_lower(Channel)}).
 	
-handle_call({message, From, To, Message}, _From, {ClientTab, MsgTab}) ->
-	Reply = case ets:lookup(ClientTab, To) of
-			[] -> To, does_not_exist;
-			[{To, List}] ->
-				case ets:lookup(MsgTab, To) of
-					[] -> 
-						ets:insert(MsgTab, {To, [Message]});
-					[{To, Messages}] ->
-						ets:insert(MsgTab, {To, [Message|Messages]})
-				end,
-			send_msg(From, Message, List, [])
-		end,
-	{reply, Reply, {ClientTab, MsgTab}};
+%% GET USER
+get_user(IP) ->
+	gen_server:call(?MODULE, {get_user, IP}).
+
+%% ===================================================================
+%% HANDLE CALL FUNCTIONS
+%% ===================================================================
+
+%% ADD A NEW CHANNEL TO THE SERVER
+handle_call({add_channel, Channel}, _From, {ChannelTab, UserTab}) ->
+	Reply = case ets:lookup(ChannelTab, Channel) of
+		[] ->
+			ets:insert(ChannelTab, {Channel, []}),
+			io:format("Channel: ~p, has been added.~n", [Channel]);
+		[{Channel, []}] ->
+			io:format("~p already exists.~n")
+	end,
+	{reply, Reply, {ChannelTab, UserTab}};
+
+%% ADD A NEW USER
+handle_call({add_user, {Username, IP, Pid}}, _From, {ChannelTab, UserTab}) ->
+	Reply = case ets:lookup(UserTab, {Username, IP, Pid}) of
+		[] ->
+			ets:insert(UserTab, {Username, IP, Pid}),
+			io:format("~p, has been added.~n", [Username]);
+		[{Username, _, _}] ->
+			io:format("~p, already exists.~n", [Username])
+	end,
+	{reply, Reply, {ChannelTab, UserTab}};
 	
-handle_call({get_all}, _From, {ClientTab, MsgTab}) ->
-	Reply = case ets:tab2list(ClientTab) of
-			[] -> no_clients;
-			Object -> Object
-		end,
-	{reply, Reply, {ClientTab, MsgTab}};
-	
-handle_call({get_msgs, Client}, _From, {ClientTab, MsgTab}) ->
-	Reply = case ets:lookup(MsgTab, Client) of
+%% SEND MESSAGE
+handle_call({send_message, From, To, Message}, _From, {ChannelTab, UserTab}) ->
+	Reply = case ets:lookup(ChannelTab, To) of
 		[] -> 
-			io:format("No messages in ~p~n", [Client]);
-		[{Client, Messages}] ->
-			Messages
-		end,
-	{reply, Reply, {ClientTab, MsgTab}};
+			io:format("~p, does not exist.~n", [To]);
+		[{To, Messages}] ->
+			ets:insert(ChannelTab, {To, [{From, Message} | Messages]}),
+			io:format("~p, received: ~p, from ~p.~n", [To, Message, From])
+	end,
+	{reply, Reply, {ChannelTab, UserTab}};
 	
-handle_call({get_channels}, _From, {ClientTab, MsgTab}) ->
-	Reply = case ets:tab2list(ClientTab) of
+%% GET CHANNELS
+handle_call({get_channels}, _From, {ChannelTab, UserTab}) ->
+	Reply = case ets:tab2list(ChannelTab) of
 		[] ->
 			no_channels;
 		Object ->
 			Object
-		end,
-	{reply, Reply, {ClientTab, MsgTab}};
+	end,
+	{reply, Reply, {ChannelTab, UserTab}};
 	
-handle_call(stop, _From, {ClientTab, MsgTab}) ->
-	{stop, normal, stopped, {ClientTab, MsgTab}}.
+%% GET CHANNEL MESSAGES
+handle_call({get_msgs, Channel}, _From, {ChannelTab, UserTab}) ->
+	Reply = case ets:lookup(ChannelTab, Channel) of
+		[] -> 
+			io:format("No messages in ~p.~n", [Channel]);
+		[{Channel, Messages}] ->
+			Messages
+		end,
+	{reply, Reply, {ChannelTab, UserTab}};
+	
+%% GET USER
+handle_call({get_user, IP}, _From, {ChannelTab, UserTab}) ->
+	Reply = case ets:match(UserTab, {'$1', IP, '$2'}) of
+		[] ->
+			io:format("User with IP: ~p doesn't exist.~n", [IP]);
+		User ->
+			User
+		end,
+	{reply, Reply, {ChannelTab, UserTab}};
+	
+handle_call(stop, _From, {ChannelTab, UserTab}) ->
+	{stop, normal, stopped, {ChannelTab, UserTab}}.
 
 handle_cast(_Msg, State) ->
 	{noreply, State}.
@@ -93,18 +121,3 @@ terminate(_Reason, _State) ->
 
 code_change(_OldVsn, State, _Extra) ->
 	{ok, State}.
-
-check_pid(Pid, [H|_T]) when Pid =:= H ->
-	true;
-check_pid(Pid, [_H|T]) ->
-	check_pid(Pid, T);
-check_pid(_, []) ->
-	false.
-
-send_msg(From, Message, [H|T], Recipients) when From =/= H ->
-	H ! Message,
-	send_msg(From, Message, T, [H|Recipients]);
-send_msg(From, Message, [_H|T], Recipients) ->
-	send_msg(From, Message, T, Recipients);
-send_msg(_From, Message, [], Recipients) ->
-	{Recipients, recieved, Message}.

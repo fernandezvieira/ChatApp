@@ -6,8 +6,8 @@ start() ->
 	Pid = spawn(fun() -> loop() end),
 	{ok, Pid}.
 				
-add_client(Name, [Pid | T]) ->
-	server:add_client(Name, Pid),
+add_client(Name, [{User, IP, Pid} | T]) ->
+	server:add_client(Name, {User, IP, Pid}),
 	add_client(Name, T);
 add_client(Name, []) ->
 	ok.

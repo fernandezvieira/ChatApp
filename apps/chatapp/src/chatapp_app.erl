@@ -20,18 +20,29 @@ stop(_State) ->
     ok.
 
 setup() ->
-	{ok, C1} = client_sup:start_child(),
-	{ok, C2} = client_sup:start_child(),
-	client:add_client("Mig", [C1, C2]),
+	server:add_channel("mig"),
+	server:add_channel("fb"),
+	
+	{ok, Pid1} = client_sup:start_child(),
+	C1 = {"George", 127334, Pid1},
+	{ok, Pid2} = client_sup:start_child(),
+	C2 = {"Steve", 189883, Pid2},
+	{ok, Pid3} = client_sup:start_child(),
+	C3 = {"Stacey", 398938, Pid3},
+	{ok, Pid4} = client_sup:start_child(),
+	C4 = {"Merin", 9479474, Pid4},
+	
+	server:add_user(C1),
+	server:add_user(C2),
+	server:add_user(C3),
+	server:add_user(C4),
+	
+	client:send_message(C1, "mig", "Mig1"),
 	client:send_message(C1, "Mig", "Hello"),
 	client:send_message(C1, "Mig", "Hi"),
 	client:send_message(C1, "Mig", "Hello george"),
 	client:send_message(C1, "Mig", "Hello tim"),
 	client:send_message(C2, "Mig", "How you doing"),
-	
-	{ok, C3} = client_sup:start_child(),
-	{ok, C4} = client_sup:start_child(),
-	client:add_client("FB", [C3, C4]),
 	client:send_message(C3, "FB", "fb1"),
 	client:send_message(C3, "FB", "fb2"),
 	client:send_message(C3, "FB", "fb3"),
