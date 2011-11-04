@@ -54,19 +54,41 @@ handle('GET', ["channels"], Req) ->
 handle('GET', ["channels", Channel], Req) ->
 	List = server:get_msgs(Channel),
 	Req:ok("<!DOCTYPE HTML> 
-			<html> 
-				<head>
-					<meta http-equiv='refresh' content='10'>
-				</head>
+			<html>
+			 	<script language='javascript' type='text/javascript'>
+				<!-- 
+
+				function ajaxFunction(){
+					var ajaxRequest;  // The variable that makes Ajax possible!
+
+					ajaxRequest = new XMLHttpRequest();
+
+					ajaxRequest.onreadystatechange = function(){
+						if(ajaxRequest.readyState == 4){
+							text = ajaxRequest.responseText;
+							elem = document.getElementById('messages');
+							elem.innerHTML = text;
+						}
+					}
+					ajaxRequest.open('GET', '/channelmessages/" ++ Channel ++ "', true);
+					ajaxRequest.send(null); 
+				}
+				setInterval( 'ajaxFunction()', 1000 );
+				//-->
+				</script>
 				<body> 
-					<ul>" ++ format_msgs(List, "") ++ "</ul> 
+					<div id='messages'> <ul>" ++ format_msgs(List, "") ++ "</ul> </div>
 					<form name ='input' action = '/channels/" ++ Channel ++ "/create' method ='post'>
 						<input type ='text' name ='message'>
 						<input type ='submit'>
 					</form>
 				</body>
 			</html>");
-
+			
+handle('GET', ["channelmessages", Channel], Req) ->
+	List = server:get_msgs(Channel),
+	Req:ok("<ul>" ++ format_msgs(List, "") ++ "</ul>");
+	
 %% SUBMITTING A MESSAGE
 handle('POST', ["channels", Channel, "create"], Req) ->
 	[{_Mes, Message}] = Req:parse_post(),
@@ -74,13 +96,7 @@ handle('POST', ["channels", Channel, "create"], Req) ->
 	IP = Record#req.peer_addr,
  	[[Username, Pid]] = server:get_user(IP),
 	client:send_message({Username, IP, Pid}, Channel, Message),
-	Req:ok("<!DOCTYPE HTML>
-			<html>
-				<head>
-					<title>Your Page Title</title>
-					<meta http-equiv='REFRESH' content='0;url=/channels/" ++ Channel ++ "/'>
-				</HEAD>
-			</HTML>");
+	Req:respond(302, [{'Location', "/channels/" ++ Channel}], "");
 
 %% PAGE 404 - NOT FOUND
 handle(_, _, Req) ->
